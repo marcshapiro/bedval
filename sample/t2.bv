@@ -1,0 +1,13 @@
+  'foo'
+
+  'bar''baz'  'baf'
+
+  'who'
+'some' # comment at eol
+  'and' 'then'
+#
+'another' #
+# one two three
+'or else' # four # five # six
+'has \t \n \e \\ \' # escapes
+'ok'
