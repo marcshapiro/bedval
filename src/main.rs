@@ -1,5 +1,6 @@
 use std::io;
 use std::io::prelude::*;
+use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
@@ -13,44 +14,54 @@ fn main() {
 }
 
 fn process_file<P: AsRef<Path>>(filename: P) -> io::Result<()> {
-    let s = try!(read_file(filename));
-    //println!("BvFile");
-    let toks = s.lex(false, true);
-    //println!("tokens");
+    let src = try!(read_file(filename));
+    let toks = lex(src.text, false, false);
     for tok in toks {
-        match tok.value {
-            BvTokE::QLiteral(q) => println!("QLiteral {}", q),
-            BvTokE::Whitespace(w) => println!("Whitespace {}", w.len()),
-            BvTokE::Comment(c) => println!("Comment {}", c),
-            BvTokE::Error(e) => println!("Error {}", e),
-        }
+        println!("{}", tok)
     }
     Ok(())
 }
 
-fn read_file<P: AsRef<Path>>(filename: P) -> io::Result<BvFile> {
+fn read_file<P: AsRef<Path>>(filename: P) -> io::Result<BvSource> {
     let mut fr = try!(File::open(filename));
     let mut s : &mut String = &mut String::with_capacity(29);
     try!(fr.read_to_string(s));
-    Ok(BvFile::new(s.to_string()))
+    Ok(BvSource { text: s.to_string() })
 }
 
-struct BvFile {
+struct BvSource {
     text: String,
+    // name: ...
 }
 
 // token enum list
+#[derive(Debug)]
 enum BvTokE {
     QLiteral(String),  // 'string'
     Whitespace(String), //  space, newline, tab
     Comment(String), // # string\n
     Error(String),
 }
-
+impl fmt::Display for BvTokE {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BvTokE::QLiteral(ref q) => write!(f, "QLiteral {}", q),
+            BvTokE::Whitespace(ref w) => write!(f, "Whitespace {}", w.len()),
+            BvTokE::Comment(ref c) => write!(f, "Comment {}", c),
+            BvTokE::Error(ref e) => write!(f, "Error {}", e),
+        }
+    }
+}
 
 // full token // todo: add range, source, ...
+#[derive(Debug)]
 struct BvToken {
     value: BvTokE,
+}
+impl fmt::Display for BvToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 fn lex_white(first_char: char, chars: &mut std::str::Chars)
@@ -129,61 +140,52 @@ fn lex_comment_eol(chars: &mut std::str::Chars) -> BvTokE {
     BvTokE::Error("Comment unreachable".to_string())
 }
 
+fn lex(text: String, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {
+    let mut tokens : Vec<BvToken> = vec![];
 
-impl BvFile {
-    fn new(s : String) -> BvFile {
-        BvFile {
-            text: s,
-        }
-    }
-
-    fn lex(&self, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {
-        let mut tokens : Vec<BvToken> = vec![];
-
-        let mut chars = self.text.chars();
-        while let Some(sc) = chars.next() {
-            let mut c = sc;
-            let mut rpt = true;
-            while rpt {
-                rpt = false;
-                if c.is_whitespace() {
-                    let (oc, toke) = lex_white(c, &mut chars);
-                    if pass_white {
-                        let tok = BvToken { value: toke };
-                        tokens.push(tok)
-                    }
-                    match oc {
-                        None => {},
-                        Some(ac) => {
-                            c = ac;
-                            rpt = true;
-                        },
-                    }
+    let mut chars = text.chars();
+    while let Some(sc) = chars.next() {
+        let mut c = sc;
+        let mut rpt = true;
+        while rpt {
+            rpt = false;
+            if c.is_whitespace() {
+                let (oc, toke) = lex_white(c, &mut chars);
+                if pass_white {
+                    let tok = BvToken { value: toke };
+                    tokens.push(tok)
                 }
-                else {
-                    if c == '\'' {
-                        let toke = lex_q(&mut chars);
-                        let tok = BvToken { value: toke };
-                        tokens.push(tok);
-                    } else if c == '#' {
-                        let otoke = lex_hash(&mut chars, pass_comment);
-                        match otoke {
-                            Some(toke) => {
-                                let tok = BvToken { value: toke };
-                                tokens.push(tok);
-                            },
-                            None => {}
-                        }
-                    } else {
-                        // TODO: read to nl
-                        let toke = BvTokE::Error("Unknown character - NYI".to_string());
-                        let tok = BvToken { value : toke };
-                        tokens.push(tok);
+                match oc {
+                    None => {},
+                    Some(ac) => {
+                        c = ac;
+                        rpt = true;
+                    },
+                }
+            }
+            else {
+                if c == '\'' {
+                    let toke = lex_q(&mut chars);
+                    let tok = BvToken { value: toke };
+                    tokens.push(tok);
+                } else if c == '#' {
+                    let otoke = lex_hash(&mut chars, pass_comment);
+                    match otoke {
+                        Some(toke) => {
+                            let tok = BvToken { value: toke };
+                            tokens.push(tok);
+                        },
+                        None => {}
                     }
+                } else {
+                    // TODO: read to nl
+                    let toke = BvTokE::Error("Unknown character - NYI".to_string());
+                    let tok = BvToken { value : toke };
+                    tokens.push(tok);
                 }
             }
         }
-
-        tokens
     }
+
+    tokens
 }
