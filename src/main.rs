@@ -15,13 +15,14 @@ fn main() {
 fn process_file<P: AsRef<Path>>(filename: P) -> io::Result<()> {
     let s = try!(read_file(filename));
     //println!("BvFile");
-    let toks = s.lex(false, false);
+    let toks = s.lex(false, true);
     //println!("tokens");
     for tok in toks {
         match tok.value {
             BvTokE::QLiteral(q) => println!("QLiteral {}", q),
             BvTokE::Whitespace(w) => println!("Whitespace {}", w.len()),
             BvTokE::Comment(c) => println!("Comment {}", c),
+            BvTokE::Error(e) => println!("Error {}", e),
         }
     }
     Ok(())
@@ -43,6 +44,7 @@ enum BvTokE {
     QLiteral(String),  // 'string'
     Whitespace(String), //  space, newline, tab
     Comment(String), // # string\n
+    Error(String),
 }
 
 
@@ -51,122 +53,133 @@ struct BvToken {
     value: BvTokE,
 }
 
-enum LexState {
-    White, // [start] whitespace
-    Q, // single quote
-    Hash, // ###
-    Comment, // # text\n
-    Error,
+fn lex_white(first_char: char, chars: &mut std::str::Chars)
+    -> (Option<char>, BvTokE) {
+    let mut word = String::with_capacity(20);
+    word.push(first_char);
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            word.push(c);
+        } else {
+            return (Some(c), BvTokE::Whitespace(word));
+        }
+    }
+    (None, BvTokE::Whitespace(word))
 }
+
+fn lex_q(chars: &mut std::str::Chars) -> BvTokE {
+    let mut word = String::with_capacity(20);
+    while let Some(c) = chars.next() {
+        if c == '\'' {
+            return BvTokE::QLiteral(word);
+        } else if c == '\n' {
+            return BvTokE::Error("Single quote to end of line".to_string());
+        } else {
+            word = word + &c.to_string();
+        }
+    }
+    BvTokE::Error("Unreachable end of single quote".to_string())
+}
+fn lex_hash(chars: &mut std::str::Chars, pass_comment: bool) -> Option<BvTokE> {
+    let mut n_hash = 1;
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            if c == '\n' { // empty comment
+                if 1 == n_hash {
+                    return if pass_comment {
+                        Some(BvTokE::Comment("".to_string()))
+                    } else {
+                        None
+                    };
+                } else {
+                    // ....
+                    return Some(BvTokE::Error("Empty multihash NYI".to_string()))
+                }
+            } else {
+                if 1 == n_hash {
+                    let toke = lex_comment_eol(chars);
+                    return if pass_comment { Some(toke) } else { None };
+                } else {
+                    return Some(BvTokE::Error("multihash NYI".to_string()));
+                }
+            };
+        } else if c == '#' {
+            n_hash += 1;
+        } else if c.is_alphanumeric() {
+            return Some(BvTokE::Error("pragma NYI".to_string()));
+        } else if "{([<`'\"|".contains(c) {
+            return Some(BvTokE::Error("Inline comment NYI".to_string()));
+        } else if "+-".contains(c) {
+            return Some(BvTokE::Error("On/off pragma NYI".to_string()));
+        } else {
+            return Some(BvTokE::Error("Bad char after #".to_string()));
+        }
+    }
+    None
+}
+fn lex_comment_eol(chars: &mut std::str::Chars) -> BvTokE {
+    let mut word = String::with_capacity(20);
+    while let Some(c) = chars.next() {
+        if c == '\n' {
+            return BvTokE::Comment(word.clone());
+        } else {
+            word = word + &c.to_string();
+        }
+    }
+    BvTokE::Error("Comment unreachable".to_string())
+}
+
+
 impl BvFile {
     fn new(s : String) -> BvFile {
         BvFile {
             text: s,
         }
     }
+
     fn lex(&self, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {
         let mut tokens : Vec<BvToken> = vec![];
-        let mut word = String::with_capacity(20);
-        let mut n_hash = 0;
-        // let mut hash_word = String::with_capacity(20);
 
-        let mut state = LexState::White;
-        for c in self.text.chars() {
-            match state {
-                LexState::White => {
-                    // println!("Start {}", c);
-                    if c.is_whitespace() {
-                        word = word + &c.to_string();
+        let mut chars = self.text.chars();
+        while let Some(sc) = chars.next() {
+            let mut c = sc;
+            let mut rpt = true;
+            while rpt {
+                rpt = false;
+                if c.is_whitespace() {
+                    let (oc, toke) = lex_white(c, &mut chars);
+                    if pass_white {
+                        let tok = BvToken { value: toke };
+                        tokens.push(tok)
                     }
-                    else {
-                        if 0 < word.len() {
-                            if pass_white {
-                                let toke = BvTokE::Whitespace(word.clone());
-                                let tok = BvToken { value: toke };
-                                tokens.push(tok);
-                            }
-                            word.truncate(0);
-                        }
-                        if c == '\'' {
-                            state = LexState::Q;
-                        } else if c == '#' {
-                            n_hash = 1;
-                            state = LexState::Hash;
-                        } else {
-                            state = LexState::Error;
-                        }
+                    match oc {
+                        None => {},
+                        Some(ac) => {
+                            c = ac;
+                            rpt = true;
+                        },
                     }
-                },
-                LexState::Q => {
-                    // println!("Q {}",c);
+                }
+                else {
                     if c == '\'' {
-                        let toke = BvTokE::QLiteral(word.clone());
+                        let toke = lex_q(&mut chars);
                         let tok = BvToken { value: toke };
                         tokens.push(tok);
-                        word.truncate(0);
-                        state = LexState::White;
-                    } else if c == '\n' {
-                        state = LexState::Error;
-                    } else {
-                        word = word + &c.to_string();
-                    }
-                },
-                LexState::Hash => {
-                    //println!("Hash");
-                    if c.is_whitespace() {
-                        if c == '\n' { // empty comment
-                            if 1 == n_hash {
-                                if pass_comment {
-                                    let toke = BvTokE::Comment("".to_string());
-                                    let tok = BvToken{ value: toke };
-                                    tokens.push(tok);
-                                }
-                                state = LexState::White;
-                            } else {
-                                // ...
-                                state = LexState::Error;
-                            }
-                        } else {
-                            if 1 == n_hash {
-                                state = LexState::Comment;
-                            } else {
-                                // ...
-                                state = LexState::Error;
-                            }
-                        }
                     } else if c == '#' {
-                        n_hash += 1;
-                    } else if c.is_alphanumeric() {
-                        // ...
-                        state = LexState::Error;
-                    } else if "{([<`'\"|".contains(c) {
-                        // ...
-                        state = LexState::Error;
-                    } else if "+-".contains(c) {
-                        // ...
-                        state = LexState::Error;
-                    } else {
-                        // ...
-                        state = LexState::Error;
-                    }
-                },
-                LexState::Comment => {
-                    //println!("Comment");
-                    if c == '\n' {
-                        if pass_comment {
-                            let toke = BvTokE::Comment(word.clone());
-                            let tok = BvToken{ value: toke };
-                            tokens.push(tok);
+                        let otoke = lex_hash(&mut chars, pass_comment);
+                        match otoke {
+                            Some(toke) => {
+                                let tok = BvToken { value: toke };
+                                tokens.push(tok);
+                            },
+                            None => {}
                         }
-                        word.truncate(0);
-                        state = LexState::White;
                     } else {
-                        word = word + &c.to_string();
+                        // TODO: read to nl
+                        let toke = BvTokE::Error("Unknown character - NYI".to_string());
+                        let tok = BvToken { value : toke };
+                        tokens.push(tok);
                     }
-                },
-                LexState::Error => {
-                    println!("Error {}", c)
-                    // FIXME: reset at nl
                 }
             }
         }
