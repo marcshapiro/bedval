@@ -1,11 +1,20 @@
   'foo'
 
+@bind
+@struct{}
+@column'foo'
+@from
+
+
+{
   'bar''baz'  'baf'
+}
 
   'who'
-'some' # comment at eol
+'some' {} { # comment at eol
   'and' 'then'
 #
+}
 'another' #
 # one two three
 'or else' # four # five # six

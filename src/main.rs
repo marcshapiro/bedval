@@ -37,14 +37,38 @@ struct BvSource {
 // token enum list
 #[derive(Debug)]
 enum BvTokE {
+    // single char tokens
+    CurlL,
+    CurlR,
+
+    // keywords (@)
+    KeyStruct,
+    KeyBind,
+    KeyFrom,
+    KeyColumn,
+
+    // literals
     QLiteral(String),  // 'string'
+    // QqLiteral
+    // Bareword
+
+    // whitespace, comments, pragmas
     Whitespace(String), //  space, newline, tab
     Comment(String), // # string\n
+    // Pragma
+
+    // oops
     Error(String),
 }
 impl fmt::Display for BvTokE {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            BvTokE::CurlL => write!(f, "Curl Start"),
+            BvTokE::CurlR => write!(f, "Curl End"),
+            BvTokE::KeyStruct => write!(f, "Struct"),
+            BvTokE::KeyBind => write!(f, "Bind"),
+            BvTokE::KeyFrom => write!(f, "From"),
+            BvTokE::KeyColumn => write!(f, "Column"),
             BvTokE::QLiteral(ref q) => write!(f, "QLiteral {}", q),
             BvTokE::Whitespace(ref w) => write!(f, "Whitespace {}", w.len()),
             BvTokE::Comment(ref c) => write!(f, "Comment {}", c),
@@ -76,6 +100,32 @@ fn lex_white(first_char: char, chars: &mut std::str::Chars)
         }
     }
     (None, BvTokE::Whitespace(word))
+}
+fn at_tok(word: String) -> BvTokE {
+    if word == "struct" {
+        return BvTokE::KeyStruct;
+    }
+    if word == "bind" {
+        return BvTokE::KeyBind;
+    }
+    if word == "from" {
+        return BvTokE::KeyFrom;
+    }
+    if word == "column" {
+        return BvTokE::KeyColumn;
+    }
+    BvTokE::Error(format!("Unknown keyword @{}", word))
+}
+fn lex_at(chars: &mut std::str::Chars) -> (Option<char>, BvTokE) {
+    let mut word = String::with_capacity(20);
+    while let Some(c) = chars.next() {
+        if c.is_alphanumeric() {
+            word.push(c);
+        } else {
+            return (Some(c), at_tok(word));
+        }
+    }
+    (None, at_tok(word))
 }
 
 fn lex_q(chars: &mut std::str::Chars) -> BvTokE {
@@ -164,10 +214,27 @@ fn lex(text: String, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {
                 }
             }
             else {
-                if c == '\'' {
+                if c == '{' {
+                    let tok = BvToken { value: BvTokE::CurlL };
+                    tokens.push(tok);
+                } else if c == '}' {
+                    let tok = BvToken { value: BvTokE::CurlR };
+                    tokens.push(tok);
+                } else if c == '\'' {
                     let toke = lex_q(&mut chars);
                     let tok = BvToken { value: toke };
                     tokens.push(tok);
+                } else if c == '@' {
+                    let (oc, toke) = lex_at(&mut chars);
+                    let tok = BvToken { value: toke };
+                    tokens.push(tok);
+                    match oc {
+                        None => {},
+                        Some(ac) => {
+                            c = ac;
+                            rpt = true;
+                        },
+                    }
                 } else if c == '#' {
                     let otoke = lex_hash(&mut chars, pass_comment);
                     match otoke {
