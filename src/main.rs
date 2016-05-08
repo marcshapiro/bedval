@@ -5,7 +5,7 @@ use std::fs::File;
 use std::path::Path;
 
 fn main() {
-    let filen = "sample/t2.bv";
+    let filen = "sample/t3.bv";
     let ok = process_file(filen);
     match ok {
         Ok(()) => println!("Ok"),
@@ -48,9 +48,9 @@ enum BvTokE {
     KeyColumn,
 
     // literals
-    QLiteral(String),  // 'string'
-    // QqLiteral
-    // Bareword
+    QLiteral(String), // 'text'
+    QqLiteral(String), // q"text"
+    Bareword(String), // text
 
     // whitespace, comments, pragmas
     Whitespace(String), //  space, newline, tab
@@ -69,8 +69,10 @@ impl fmt::Display for BvTokE {
             BvTokE::KeyBind => write!(f, "Bind"),
             BvTokE::KeyFrom => write!(f, "From"),
             BvTokE::KeyColumn => write!(f, "Column"),
-            BvTokE::QLiteral(ref q) => write!(f, "QLiteral {}", q),
-            BvTokE::Whitespace(ref w) => write!(f, "Whitespace {}", w.len()),
+            BvTokE::QLiteral(ref q) => write!(f, "q {}", q),
+            BvTokE::QqLiteral(ref q) => write!(f, "qq {}", q),
+            BvTokE::Bareword(ref q) => write!(f, "bare {}", q),
+            BvTokE::Whitespace(ref w) => write!(f, "White {}", w.len()),
             BvTokE::Comment(ref c) => write!(f, "Comment {}", c),
             BvTokE::Error(ref e) => write!(f, "Error {}", e),
         }
@@ -190,6 +192,153 @@ fn lex_comment_eol(chars: &mut std::str::Chars) -> BvTokE {
     BvTokE::Error("Comment unreachable".to_string())
 }
 
+struct QqFlags {
+    match_word: bool, // true for leading qQ.   false for leading tT
+    digit_esc: bool, // d
+    quote_esc: bool, // q
+    tab_esc: bool, // t
+    curl_esc: bool, // c
+    // only w/ qQ
+    hidden_chars: bool, // h
+    newlines: bool, // n
+}
+
+fn init_qq_flags(mw: bool, df: bool) -> QqFlags {
+    QqFlags {
+        match_word: mw,
+        digit_esc: df,
+        quote_esc: df,
+        tab_esc: df,
+        curl_esc: df,
+        hidden_chars: mw && df,
+        newlines: mw && df,
+    }
+}
+
+fn qq_flag(flags: String) -> Result<QqFlags, BvTokE> {
+    let mut chars = flags.chars();
+    let fc = match chars.next() {
+        None => return Err(BvTokE::Error("qq empty word".to_string())),
+        Some(c) => c
+    };
+    let t_cs = "cdqt";
+    let q_cs = "cdhnqt";
+    let (cs,rv,qf) = match fc {
+        't' => (t_cs, true, init_qq_flags(false, false)),
+        'T' => (t_cs, false, init_qq_flags(false, true)),
+        'q' => (q_cs, true, init_qq_flags(true, false)),
+        'Q' => (q_cs, false, init_qq_flags(true, true)),
+        _ => { return Err(BvTokE::Error("qq flags must start with T or Q".to_string())) }
+    };
+    let mut f = qf;
+    let mut last_ix: Option<usize> = None;
+    while let Some(c) = chars.next() {
+        let oix = cs.find(c);
+        let ix = match oix {
+            None => { return Err(BvTokE::Error("unrecognized qq flag".to_string())) }
+            Some(ii) => ii
+        };
+        match last_ix {
+            None => {},
+            Some(lix) => if ix <= lix {
+                return Err(BvTokE::Error("qq flags must be ordered".to_string()))
+            }
+        };
+        last_ix = Some(ix);
+        match c {
+            'c' => { f.curl_esc = rv },
+            'd' => { f.digit_esc = rv },
+            'h' => { f.hidden_chars = rv },
+            'n' => { f.newlines = rv },
+            'q' => { f.quote_esc = rv },
+            't' => { f.tab_esc = rv },
+            _ => return Err(BvTokE::Error("invalid qq flag".to_string()))
+        }
+    }
+
+    Ok(f)
+}
+
+fn lex_esc(chars: &mut std::str::Chars, digit_esc: bool, quote_esc: bool,
+        tab_esc: bool) -> Option<char> {
+    let oc = chars.next();
+    match oc {
+        None => return None,
+        Some(c) => if c == '\\' {
+            return Some('\\')
+        } else if digit_esc && c == '{' {
+            // ....
+        } else if tab_esc && c == 't' {
+            return Some('\t')
+        } else if tab_esc && c == 'n' {
+            return Some('\n')
+        } else if tab_esc && c == '0' {
+            return Some('\0')
+        } else if quote_esc && c == '"' {
+            return Some('\"')
+        } else {
+            return None
+        }
+    }
+    None
+}
+
+fn lex_tqq(chars: &mut std::str::Chars, curl_esc: bool, digit_esc: bool,
+        quote_esc: bool, tab_esc: bool, newlines: bool, hidden_chars: bool) -> BvTokE {
+    let slash_esc = tab_esc || digit_esc || quote_esc;
+    let mut word = String::with_capacity(20);
+    while let Some(c) = chars.next() {
+        if c == '"' {
+            return BvTokE::QqLiteral(word)
+        } else if slash_esc && c == '\\' {
+            let ow = lex_esc(chars, digit_esc, quote_esc, tab_esc);
+            match ow {
+                Some(w) => word.push(w),
+                None => return BvTokE::Error("esc to eof".to_string()),
+            }
+        } else if curl_esc && c == '{' {
+            return BvTokE::Error("\\{ddd} NYI".to_string())
+        } else if !newlines && c == '\n' {
+            return BvTokE::Error("newline forbidden".to_string())
+        } else if !hidden_chars && c.is_control() { // probably not the exact test
+            return BvTokE::Error("hidden chars forbidden".to_string())
+        } else {
+            word.push(c);
+        }
+    }
+
+
+    BvTokE::Error("tqq to eof".to_string())
+}
+
+fn lex_qq(flags: String, chars: &mut std::str::Chars) -> BvTokE {
+    // t None        // tdqt == T      // t"text"
+    // T c d q t       // Tcdqt == t   //  d=\123   q=\"\'   t=\t\n\r (dqt get \\)
+    // q None        // qcdhnqt == Q   // q"alnum"text"alnum"
+    // Q c d h n q t // Qcdhnqt == q // c={nl},,,  h=ctrl  n=newline
+    let f = match qq_flag(flags) {
+        Err(e) => return e,
+        Ok(fv) => fv,
+    };
+    if f.match_word {
+        return BvTokE::Error("qqq nyi".to_string())
+    }
+    lex_tqq(chars, f.curl_esc, f.digit_esc, f.quote_esc, f.tab_esc, f.newlines, f.hidden_chars)
+}
+fn lex_bare(first_char: char, chars: &mut std::str::Chars) -> (Option<char>, BvTokE) {
+    let mut word = String::with_capacity(20);
+    word.push(first_char);
+    while let Some(c) = chars.next() {
+        if c.is_alphanumeric() {
+            word.push(c);
+        } else if c == '"' {
+            return (None, lex_qq(word, chars));
+        } else {
+            return (Some(c), BvTokE::Bareword(word));
+        }
+    }
+    (None, BvTokE::Bareword(word))
+}
 fn lex(text: String, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {
     let mut tokens : Vec<BvToken> = vec![];
 
@@ -205,6 +354,17 @@ fn lex(text: String, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {
                     let tok = BvToken { value: toke };
                     tokens.push(tok)
                 }
+                match oc {
+                    None => {},
+                    Some(ac) => {
+                        c = ac;
+                        rpt = true;
+                    },
+                }
+            } else if c.is_alphanumeric() {
+                let (oc, toke) = lex_bare(c, &mut chars);
+                let tok = BvToken { value: toke };
+                tokens.push(tok);
                 match oc {
                     None => {},
                     Some(ac) => {

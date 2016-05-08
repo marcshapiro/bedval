@@ -1,0 +1,8 @@
+# test qq
+t"one"
+T"two"
+t"a b ' c"
+# q""three""
+# Q""four""
+t"a\b"
+tq"a\\b\"c"
