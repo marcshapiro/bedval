@@ -15,9 +15,7 @@ pub enum BvTokE {
     KeyColumn,
 
     // literals
-    QLiteral(String), // 'text'
-    QqLiteral(String), // q"text"
-    Bareword(String), // text
+    Literal(String), // 'text'
 
     // whitespace, comments, pragmas
     Whitespace(String), //  space, newline, tab
@@ -37,9 +35,7 @@ impl fmt::Display for BvTokE {
             BvTokE::KeyBind => write!(f, "Bind"),
             BvTokE::KeyFrom => write!(f, "From"),
             BvTokE::KeyColumn => write!(f, "Column"),
-            BvTokE::QLiteral(ref q) => write!(f, "q {}", q),
-            BvTokE::QqLiteral(ref q) => write!(f, "qq {}", q),
-            BvTokE::Bareword(ref q) => write!(f, "bare {}", q),
+            BvTokE::Literal(ref q) => write!(f, "q {}", q),
             BvTokE::Whitespace(ref w) => write!(f, "White {}", w.len()),
             BvTokE::Comment(ref c) => write!(f, "Comment {}", c),
             BvTokE::Error(ref e) => write!(f, "Error {}", e),
@@ -50,7 +46,7 @@ impl fmt::Display for BvTokE {
 // full token // todo: add range, source, ...
 #[derive(Debug)]
 pub struct BvToken {
-    value: BvTokE,
+    pub value: BvTokE,
 }
 
 impl fmt::Display for BvToken {
@@ -121,7 +117,7 @@ fn lex_q(chars: &mut std::str::Chars) -> BvTokE {
     let mut word = empty_literal();
     while let Some(c) = chars.next() {
         if c == '\'' {
-            return BvTokE::QLiteral(word);
+            return BvTokE::Literal(word);
         } else if c == '\n' {
             return BvTokE::Error("Single quote to end of line".to_string());
         } else {
@@ -278,7 +274,7 @@ fn lex_tqq(chars: &mut std::str::Chars, curl_esc: bool, digit_esc: bool,
     let mut word = empty_literal();
     while let Some(c) = chars.next() {
         if c == '"' {
-            return BvTokE::QqLiteral(word)
+            return BvTokE::Literal(word)
         } else if slash_esc && c == '\\' {
             let ow = lex_esc(chars, digit_esc, quote_esc, tab_esc);
             match ow {
@@ -324,10 +320,10 @@ fn lex_bare(first_char: char, chars: &mut std::str::Chars) -> (Option<char>, BvT
         } else if c == '"' {
             return (None, lex_qq(word, chars));
         } else {
-            return (Some(c), BvTokE::Bareword(word));
+            return (Some(c), BvTokE::Literal(word));
         }
     }
-    (None, BvTokE::Bareword(word))
+    (None, BvTokE::Literal(word))
 }
 
 pub fn lex(text: String, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {

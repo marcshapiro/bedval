@@ -1,4 +1,5 @@
 mod lex;
+mod ast;
 
 use std::io;
 use std::io::Read;
@@ -6,7 +7,7 @@ use std::fs;
 use std::path;
 
 fn main() {
-    let filen = "sample/t3.bv";
+    let filen = "sample/t4.bv";
     let ok = process_file(filen);
     match ok {
         Ok(()) => println!("Ok"),
@@ -17,9 +18,11 @@ fn main() {
 fn process_file<P: AsRef<path::Path>>(filename: P) -> io::Result<()> {
     let src = try!(read_file(filename));
     let toks = lex::lex(src.text, false, false);
-    for tok in toks {
-        println!("{}", tok)
-    }
+    let ast = ast::parse(&toks);
+    println!("{}", ast);
+    //for tok in toks {
+    //    println!("{}", tok)
+    //}
     Ok(())
 }
 
