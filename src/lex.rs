@@ -403,3 +403,50 @@ pub fn lex(text: String, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {
 
     tokens
 }
+
+#[test]
+fn test_empty_string() {
+    let a = lex("".to_string(), true, true);
+    assert!(0 == a.len())
+}
+
+#[test]
+fn test_white_filtered() {
+    let w = "  \t  \n  ".to_string();
+    let a = lex(w, false, true);
+    assert!(0 == a.len());
+}
+
+#[test]
+fn test_white() {
+    let w = "  \t  \n  ".to_string();
+    let v = w.clone();
+    let b = lex(w, true, true);
+    assert!(1 == b.len());
+    match b[0] {
+        BvToken{ value: BvTokE::Whitespace(ref x) } => assert!(x.clone() == v),
+        _ => assert!(false),
+    }
+}
+
+#[test]
+fn test_bare() {
+    let w = "abc123";
+    let a = lex(w.to_string(), true, true);
+    assert!(1 == a.len());
+    match a[0] {
+        BvToken{ value: BvTokE::Literal(ref x) } => assert!(x.clone() == w.to_string()),
+        _ => assert!(false),
+    }
+}
+
+#[test]
+fn test_err() {
+    let w = "_";
+    let a = lex(w.to_string(), true, true);
+    assert!(1 == a.len());
+    match a[0] {
+        BvToken{ value: BvTokE::Error(_) } => {},
+        _ => assert!(false)
+    }
+}

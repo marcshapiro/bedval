@@ -10,6 +10,12 @@ run: $(EXE)
 test: $(EXE)
 	cargo test
 
+testn: $(EXE)
+	cargo test -- --nocapture # don't hide stdout
+
+testv: $(EXE)
+	cargo test --verbose
+
 build: $(EXE)
 
 $(EXE): $(SRC) Makefile
@@ -22,18 +28,20 @@ echo:
 	echo "EXE: $(EXE)"
 	echo "SRC: $(SRC)"
 
-git1:
-	git add -n .
-	git add .
-
-git2:
-	git diff
+g1:
 	git status
 
-git3:
-	git commit --dry-run
-	git commit
+g2:
+	git diff
 
-git4:
-	git push -n
-	git push
+g3:
+	git add . # -n for dryrun
+
+g4:
+	git status
+
+g5:
+	git commit # --dry-run
+
+g6:
+	git push # -n for dryrun
