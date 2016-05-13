@@ -3,7 +3,7 @@ use std::fmt;
 
 // token enum list
 #[derive(Debug)]
-pub enum BvTokE {
+pub enum Tok {
     // single char tokens
     CurlL,
     CurlR,
@@ -13,6 +13,10 @@ pub enum BvTokE {
     KeyBind,
     KeyFrom,
     KeyColumn,
+    KeyRoot,
+    KeyUp,
+    KeySys,
+    KeyMy,
 
     // literals
     Literal(String), // 'text'
@@ -26,41 +30,25 @@ pub enum BvTokE {
     Error(String),
 }
 
-impl fmt::Display for BvTokE {
+impl fmt::Display for Tok {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            BvTokE::CurlL => write!(f, "Curl Start"),
-            BvTokE::CurlR => write!(f, "Curl End"),
-            BvTokE::KeyStruct => write!(f, "Struct"),
-            BvTokE::KeyBind => write!(f, "Bind"),
-            BvTokE::KeyFrom => write!(f, "From"),
-            BvTokE::KeyColumn => write!(f, "Column"),
-            BvTokE::Literal(ref q) => write!(f, "q {}", q),
-            BvTokE::Whitespace(ref w) => write!(f, "White {}", w.len()),
-            BvTokE::Comment(ref c) => write!(f, "Comment {}", c),
-            BvTokE::Error(ref e) => write!(f, "Error {}", e),
+            Tok::CurlL => write!(f, "Curl Start"),
+            Tok::CurlR => write!(f, "Curl End"),
+            Tok::KeyStruct => write!(f, "Struct"),
+            Tok::KeyBind => write!(f, "Bind"),
+            Tok::KeyFrom => write!(f, "From"),
+            Tok::KeyColumn => write!(f, "Column"),
+            Tok::KeyRoot => write!(f, "Root"),
+            Tok::KeyUp => write!(f, "Up"),
+            Tok::KeySys => write!(f, "Sys"),
+            Tok::KeyMy => write!(f, "My"),
+            Tok::Literal(ref q) => write!(f, "q {}", q),
+            Tok::Whitespace(ref w) => write!(f, "White {}", w.len()),
+            Tok::Comment(ref c) => write!(f, "Comment {}", c),
+            Tok::Error(ref e) => write!(f, "Error {}", e),
         }
     }
-}
-
-// full token // todo: add range, source, ...
-#[derive(Debug)]
-pub struct BvToken {
-    pub value: BvTokE,
-}
-
-impl fmt::Display for BvToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-fn empty_white() -> String {
-    String::with_capacity(5)
-}
-
-fn empty_key() -> String {
-    String::with_capacity(8)
 }
 
 fn empty_literal() -> String {
@@ -72,109 +60,100 @@ fn empty_comment() -> String {
 }
 
 fn lex_white(first_char: char, chars: &mut std::str::Chars)
-    -> (Option<char>, BvTokE) {
-    let mut word = empty_white();
-    word.push(first_char);
-    while let Some(c) = chars.next() {
-        if c.is_whitespace() {
-            word.push(c);
-        } else {
-            return (Some(c), BvTokE::Whitespace(word));
-        }
-    }
-    (None, BvTokE::Whitespace(word))
+    -> (Option<char>, Tok) {
+  let (oc, word) = read_to(chars, |c| !c.is_whitespace());
+  (oc, Tok::Whitespace(first_char.to_string()+&word))
 }
 
-fn at_tok(word: String) -> BvTokE {
-    if word == "struct" {
-        return BvTokE::KeyStruct;
-    }
+fn at_tok(word: String) -> Tok {
     if word == "bind" {
-        return BvTokE::KeyBind;
+        Tok::KeyBind
+    } else if word == "column" {
+        Tok::KeyColumn
+    } else if word == "from" {
+        Tok::KeyFrom
+    } else if word == "my" {
+        Tok::KeyMy
+    } else if word == "root" {
+        Tok::KeyRoot
+    } else if word == "struct" {
+        Tok::KeyStruct
+    } else if word == "sys" {
+        Tok::KeySys
+    } else if word == "up" {
+        Tok::KeyUp
+    } else {
+        Tok::Error(format!("Unknown keyword @{}", word))
     }
-    if word == "from" {
-        return BvTokE::KeyFrom;
-    }
-    if word == "column" {
-        return BvTokE::KeyColumn;
-    }
-    BvTokE::Error(format!("Unknown keyword @{}", word))
 }
 
-fn lex_at(chars: &mut std::str::Chars) -> (Option<char>, BvTokE) {
-    let mut word = empty_key();
-    while let Some(c) = chars.next() {
-        if c.is_alphanumeric() {
-            word.push(c);
-        } else {
-            return (Some(c), at_tok(word));
-        }
-    }
-    (None, at_tok(word))
+fn lex_at(chars: &mut std::str::Chars) -> (Option<char>, Tok) {
+    let (oc, word) = read_to(chars, |c| !c.is_alphanumeric());
+    (oc, at_tok(word))
 }
 
-fn lex_q(chars: &mut std::str::Chars) -> BvTokE {
+fn lex_q(chars: &mut std::str::Chars) -> Tok {
     let mut word = empty_literal();
     while let Some(c) = chars.next() {
         if c == '\'' {
-            return BvTokE::Literal(word);
+            return Tok::Literal(word);
         } else if c == '\n' {
-            return BvTokE::Error("Single quote to end of line".to_string());
+            return Tok::Error("Single quote to end of line".to_string());
         } else {
             word = word + &c.to_string();
         }
     }
-    BvTokE::Error("Unreachable end of single quote".to_string())
+    Tok::Error("Unreachable end of single quote".to_string())
 }
 
-fn lex_hash(chars: &mut std::str::Chars, pass_comment: bool) -> Option<BvTokE> {
+fn lex_hash(chars: &mut std::str::Chars, pass_comment: bool) -> Option<Tok> {
     let mut n_hash = 1;
     while let Some(c) = chars.next() {
         if c.is_whitespace() {
             if c == '\n' { // empty comment
                 if 1 == n_hash {
                     return if pass_comment {
-                        Some(BvTokE::Comment("".to_string()))
+                        Some(Tok::Comment("".to_string()))
                     } else {
                         None
                     };
                 } else {
                     // ....
-                    return Some(BvTokE::Error("Empty multihash NYI".to_string()))
+                    return Some(Tok::Error("Empty multihash NYI".to_string()))
                 }
             } else {
                 if 1 == n_hash {
-                    let toke = lex_comment_eol(chars);
-                    return if pass_comment { Some(toke) } else { None };
+                    let tok = lex_comment_eol(chars);
+                    return if pass_comment { Some(tok) } else { None };
                 } else {
-                    return Some(BvTokE::Error("multihash NYI".to_string()));
+                    return Some(Tok::Error("multihash NYI".to_string()));
                 }
             };
         } else if c == '#' {
             n_hash += 1;
         } else if c.is_alphanumeric() {
-            return Some(BvTokE::Error("pragma NYI".to_string()));
+            return Some(Tok::Error("pragma NYI".to_string()));
         } else if "{([<`'\"|".contains(c) {
-            return Some(BvTokE::Error("Inline comment NYI".to_string()));
+            return Some(Tok::Error("Inline comment NYI".to_string()));
         } else if "+-".contains(c) {
-            return Some(BvTokE::Error("On/off pragma NYI".to_string()));
+            return Some(Tok::Error("On/off pragma NYI".to_string()));
         } else {
-            return Some(BvTokE::Error("Bad char after #".to_string()));
+            return Some(Tok::Error("Bad char after #".to_string()));
         }
     }
     None
 }
 
-fn lex_comment_eol(chars: &mut std::str::Chars) -> BvTokE {
+fn lex_comment_eol(chars: &mut std::str::Chars) -> Tok {
     let mut word = empty_comment();
     while let Some(c) = chars.next() {
         if c == '\n' {
-            return BvTokE::Comment(word.clone());
+            return Tok::Comment(word.clone());
         } else {
             word = word + &c.to_string();
         }
     }
-    BvTokE::Error("Comment unreachable".to_string())
+    Tok::Error("Comment unreachable".to_string())
 }
 
 struct QqFlags {
@@ -200,10 +179,10 @@ fn init_qq_flags(mw: bool, df: bool) -> QqFlags {
     }
 }
 
-fn qq_flag(flags: String) -> Result<QqFlags, BvTokE> {
+fn qq_flag(flags: String) -> Result<QqFlags, Tok> {
     let mut chars = flags.chars();
     let fc = match chars.next() {
-        None => return Err(BvTokE::Error("qq empty word".to_string())),
+        None => return Err(Tok::Error("qq empty word".to_string())),
         Some(c) => c
     };
     let t_cs = "cdqt";
@@ -213,20 +192,20 @@ fn qq_flag(flags: String) -> Result<QqFlags, BvTokE> {
         'T' => (t_cs, false, init_qq_flags(false, true)),
         'q' => (q_cs, true, init_qq_flags(true, false)),
         'Q' => (q_cs, false, init_qq_flags(true, true)),
-        _ => { return Err(BvTokE::Error("qq flags must start with T or Q".to_string())) }
+        _ => { return Err(Tok::Error("qq flags must start with T or Q".to_string())) }
     };
     let mut f = qf;
     let mut last_ix: Option<usize> = None;
     while let Some(c) = chars.next() {
         let oix = cs.find(c);
         let ix = match oix {
-            None => { return Err(BvTokE::Error("unrecognized qq flag".to_string())) }
+            None => { return Err(Tok::Error("unrecognized qq flag".to_string())) }
             Some(ii) => ii
         };
         match last_ix {
             None => {},
             Some(lix) => if ix <= lix {
-                return Err(BvTokE::Error("qq flags must be ordered".to_string()))
+                return Err(Tok::Error("qq flags must be ordered".to_string()))
             }
         };
         last_ix = Some(ix);
@@ -237,7 +216,7 @@ fn qq_flag(flags: String) -> Result<QqFlags, BvTokE> {
             'n' => { f.newlines = rv },
             'q' => { f.quote_esc = rv },
             't' => { f.tab_esc = rv },
-            _ => return Err(BvTokE::Error("invalid qq flag".to_string()))
+            _ => return Err(Tok::Error("invalid qq flag".to_string()))
         }
     }
 
@@ -246,57 +225,53 @@ fn qq_flag(flags: String) -> Result<QqFlags, BvTokE> {
 
 fn lex_esc(chars: &mut std::str::Chars, digit_esc: bool, quote_esc: bool,
         tab_esc: bool) -> Option<char> {
-    let oc = chars.next();
-    match oc {
-        None => return None,
+    match chars.next() {
+        None => None,
         Some(c) => if c == '\\' {
-            return Some('\\')
+            Some('\\')
         } else if digit_esc && c == '{' {
-            // ....
+            Some('?') // FIXME
         } else if tab_esc && c == 't' {
-            return Some('\t')
+            Some('\t')
         } else if tab_esc && c == 'n' {
-            return Some('\n')
+            Some('\n')
         } else if tab_esc && c == '0' {
-            return Some('\0')
+            Some('\0')
         } else if quote_esc && c == '"' {
-            return Some('\"')
+            Some('\"')
         } else {
-            return None
+            None
         }
     }
-    None
 }
 
 fn lex_tqq(chars: &mut std::str::Chars, curl_esc: bool, digit_esc: bool,
-        quote_esc: bool, tab_esc: bool, newlines: bool, hidden_chars: bool) -> BvTokE {
+        quote_esc: bool, tab_esc: bool, newlines: bool, hidden_chars: bool) -> Tok {
     let slash_esc = tab_esc || digit_esc || quote_esc;
     let mut word = empty_literal();
     while let Some(c) = chars.next() {
         if c == '"' {
-            return BvTokE::Literal(word)
+            return Tok::Literal(word)
         } else if slash_esc && c == '\\' {
             let ow = lex_esc(chars, digit_esc, quote_esc, tab_esc);
             match ow {
                 Some(w) => word.push(w),
-                None => return BvTokE::Error("esc to eof".to_string()),
+                None => return Tok::Error("esc to eof".to_string()),
             }
         } else if curl_esc && c == '{' {
-            return BvTokE::Error("\\{ddd} NYI".to_string())
+            return Tok::Error("\\{ddd} NYI".to_string())
         } else if !newlines && c == '\n' {
-            return BvTokE::Error("newline forbidden".to_string())
+            return Tok::Error("newline forbidden".to_string())
         } else if !hidden_chars && c.is_control() { // probably not the exact test
-            return BvTokE::Error("hidden chars forbidden".to_string())
+            return Tok::Error("hidden chars forbidden".to_string())
         } else {
             word.push(c);
         }
     }
-
-
-    BvTokE::Error("tqq to eof".to_string())
+    Tok::Error("tqq to eof".to_string())
 }
 
-fn lex_qq(flags: String, chars: &mut std::str::Chars) -> BvTokE {
+fn lex_qq(flags: String, chars: &mut std::str::Chars) -> Tok {
     // t None        // tdqt == T      // t"text"
     // T c d q t       // Tcdqt == t   //  d=\123   q=\"\'   t=\t\n\r (dqt get \\)
     // q None        // qcdhnqt == Q   // q"alnum"text"alnum"
@@ -306,12 +281,12 @@ fn lex_qq(flags: String, chars: &mut std::str::Chars) -> BvTokE {
         Ok(fv) => fv,
     };
     if f.match_word {
-        return BvTokE::Error("qqq nyi".to_string())
+        return Tok::Error("qqq nyi".to_string())
     }
     lex_tqq(chars, f.curl_esc, f.digit_esc, f.quote_esc, f.tab_esc, f.newlines, f.hidden_chars)
 }
 
-fn lex_bare(first_char: char, chars: &mut std::str::Chars) -> (Option<char>, BvTokE) {
+fn lex_bare(first_char: char, chars: &mut std::str::Chars) -> (Option<char>, Tok) {
     let mut word = empty_literal();
     word.push(first_char);
     while let Some(c) = chars.next() {
@@ -320,111 +295,88 @@ fn lex_bare(first_char: char, chars: &mut std::str::Chars) -> (Option<char>, BvT
         } else if c == '"' {
             return (None, lex_qq(word, chars));
         } else {
-            return (Some(c), BvTokE::Literal(word));
+            return (Some(c), Tok::Literal(word));
         }
     }
-    (None, BvTokE::Literal(word))
+    (None, Tok::Literal(word))
 }
 
-pub fn lex(text: String, pass_white: bool, pass_comment: bool) -> Vec<BvToken> {
-    let mut tokens : Vec<BvToken> = vec![];
+fn read_to<F>(chars: &mut std::str::Chars, is_end: F)
+    -> (Option<char>, String)
+    where F: Fn(char) -> bool {
+  let mut word = empty_literal(); // ??
+  while let Some(c) = chars.next() {
+      if is_end(c) {
+          return (Some(c), word)
+      } else {
+          word.push(c)
+      }
+  }
+  (None, word)
+}
 
-    let mut chars = text.chars();
-    while let Some(sc) = chars.next() {
-        let mut c = sc;
-        let mut rpt = true;
-        while rpt {
-            rpt = false;
-            if c.is_whitespace() {
-                let (oc, toke) = lex_white(c, &mut chars);
-                if pass_white {
-                    let tok = BvToken { value: toke };
-                    tokens.push(tok)
-                }
-                match oc {
-                    None => {},
-                    Some(ac) => {
-                        c = ac;
-                        rpt = true;
-                    },
-                }
-            } else if c.is_alphanumeric() {
-                let (oc, toke) = lex_bare(c, &mut chars);
-                let tok = BvToken { value: toke };
-                tokens.push(tok);
-                match oc {
-                    None => {},
-                    Some(ac) => {
-                        c = ac;
-                        rpt = true;
-                    },
-                }
-            }
-            else {
-                if c == '{' {
-                    let tok = BvToken { value: BvTokE::CurlL };
-                    tokens.push(tok);
-                } else if c == '}' {
-                    let tok = BvToken { value: BvTokE::CurlR };
-                    tokens.push(tok);
-                } else if c == '\'' {
-                    let toke = lex_q(&mut chars);
-                    let tok = BvToken { value: toke };
-                    tokens.push(tok);
-                } else if c == '@' {
-                    let (oc, toke) = lex_at(&mut chars);
-                    let tok = BvToken { value: toke };
-                    tokens.push(tok);
-                    match oc {
-                        None => {},
-                        Some(ac) => {
-                            c = ac;
-                            rpt = true;
-                        },
-                    }
-                } else if c == '#' {
-                    let otoke = lex_hash(&mut chars, pass_comment);
-                    match otoke {
-                        Some(toke) => {
-                            let tok = BvToken { value: toke };
-                            tokens.push(tok);
-                        },
-                        None => {}
-                    }
-                } else {
-                    // TODO: read to nl
-                    let toke = BvTokE::Error("Unknown character - NYI".to_string());
-                    let tok = BvToken { value : toke };
-                    tokens.push(tok);
-                }
-            }
+fn some_tok(pair: (Option<char>, Tok)) -> (Option<char>, Option<Tok>) {
+    let (oc, tok) = pair;
+    (oc, Some(tok))
+}
+
+fn lex_tok(first_char: Option<char>, chars: &mut std::str::Chars)
+        -> (Option<char>, Option<Tok>) {
+    let c = match first_char {
+        Some(fc) => fc,
+        None => match chars.next() {
+            Some(nc) => nc,
+            None => return (None, None), // do I need an EOF token?
         }
+    };
+    if c.is_whitespace() {
+        some_tok(lex_white(c, chars))
+    } else if c.is_alphanumeric() {
+        some_tok(lex_bare(c, chars))
+    } else if c == '{' {
+        (None, Some(Tok::CurlL))
+    } else if c == '}' {
+        (None, Some(Tok::CurlR))
+    } else if c == '\'' {
+        (None, Some(lex_q(chars)))
+    } else if c == '@' {
+        some_tok(lex_at(chars))
+    } else if c == '#' {
+        (None, lex_hash(chars, true))
+    } else {
+        (None,Some(Tok::Error(format!("Bad char: {}",c))))
     }
+}
 
+pub fn lex(text: String) -> Vec<Tok> {
+    let mut tokens : Vec<Tok> = vec![];
+    let mut chars = text.chars();
+    let mut oc: Option<char> = None;
+    loop {
+        let (noc, otok) = lex_tok(oc, &mut chars);
+        match otok {
+            Some(tok) => tokens.push(tok),
+            None => break,
+        }
+        oc = noc;
+    }
     tokens
 }
 
 #[test]
 fn test_empty_string() {
-    let a = lex("".to_string(), true, true);
+    let a = lex("".to_string());
     assert!(0 == a.len())
-}
-
-#[test]
-fn test_white_filtered() {
-    let w = "  \t  \n  ".to_string();
-    let a = lex(w, false, true);
-    assert!(0 == a.len());
 }
 
 #[test]
 fn test_white() {
     let w = "  \t  \n  ".to_string();
     let v = w.clone();
-    let b = lex(w, true, true);
+    let b = lex(w);
     assert!(1 == b.len());
     match b[0] {
-        BvToken{ value: BvTokE::Whitespace(ref x) } => assert!(x.clone() == v),
+        Tok::Whitespace(ref x) => assert!(x.clone() == v),
         _ => assert!(false),
     }
 }
@@ -432,10 +384,10 @@ fn test_white() {
 #[test]
 fn test_bare() {
     let w = "abc123";
-    let a = lex(w.to_string(), true, true);
+    let a = lex(w.to_string());
     assert!(1 == a.len());
     match a[0] {
-        BvToken{ value: BvTokE::Literal(ref x) } => assert!(x.clone() == w.to_string()),
+        Tok::Literal(ref x) => assert!(x.clone() == w.to_string()),
         _ => assert!(false),
     }
 }
@@ -443,10 +395,10 @@ fn test_bare() {
 #[test]
 fn test_err() {
     let w = "_";
-    let a = lex(w.to_string(), true, true);
+    let a = lex(w.to_string());
     assert!(1 == a.len());
     match a[0] {
-        BvToken{ value: BvTokE::Error(_) } => {},
+        Tok::Error(_) => {},
         _ => assert!(false)
     }
 }

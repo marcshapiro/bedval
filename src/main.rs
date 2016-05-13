@@ -17,12 +17,9 @@ fn main() {
 
 fn process_file<P: AsRef<path::Path>>(filename: P) -> io::Result<()> {
     let src = try!(read_file(filename));
-    let toks = lex::lex(src.text, false, false);
-    let ast = ast::parse(&toks);
+    let toks = lex::lex(src.text);
+    let ast = ast::parse(toks);
     println!("{}", ast);
-    //for tok in toks {
-    //    println!("{}", tok)
-    //}
     Ok(())
 }
 
