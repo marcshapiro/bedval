@@ -18,7 +18,7 @@ testv: $(EXE)
 
 build: $(EXE)
 
-$(EXE): $(SRC) Makefile
+$(EXE): $(SRC) Makefile Cargo.toml
 	cargo build
 
 help:

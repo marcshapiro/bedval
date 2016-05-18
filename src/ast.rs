@@ -72,15 +72,15 @@ fn parse_expr(ofirst_tok: Option<lex::Tok>, it: &mut vec::IntoIter<lex::Tok>) ->
         }
     };
     match first_tok {
-        lex::Tok::KeyStruct => {
+        lex::Tok::Key(lex::Key::Struct) => {
             // ...
             Expr::Error("Struct NYI".to_string())
         },
-        lex::Tok::KeyFrom => {
+        lex::Tok::Key(lex::Key::From) => {
             // ...
             Expr::Error("From NYI".to_string())
         },
-        lex::Tok::KeyColumn => {
+        lex::Tok::Key(lex::Key::Column) => {
             let otok = non_gray(it);
             match otok {
                 Some(lex::Tok::CurlL) => {
@@ -93,10 +93,10 @@ fn parse_expr(ofirst_tok: Option<lex::Tok>, it: &mut vec::IntoIter<lex::Tok>) ->
                 _ => Expr::Error("@Column must be followed by '{'".to_string())
             }
         },
-        lex::Tok::KeyRoot => Expr::KeyRoot,
-        lex::Tok::KeyUp => Expr::KeyUp,
-        lex::Tok::KeySys => Expr::KeySys,
-        lex::Tok::KeyMy => Expr::KeyMy,
+        lex::Tok::Key(lex::Key::Root) => Expr::KeyRoot,
+        lex::Tok::Key(lex::Key::Up) => Expr::KeyUp,
+        lex::Tok::Key(lex::Key::Sys) => Expr::KeySys,
+        lex::Tok::Key(lex::Key::My) => Expr::KeyMy,
         lex::Tok::Literal(s) => Expr::Literal(s),
         _ => Expr::Error("Unexpected token".to_string())
     }
@@ -111,9 +111,9 @@ fn parse_exprs(it: &mut vec::IntoIter<lex::Tok>) -> (Vec<Expr>, Option<lex::Tok>
         match otok {
             Some(t) => {
                 match t {
-                    lex::Tok::KeyStruct
-                    | lex::Tok::KeyFrom
-                    | lex::Tok::KeyColumn
+                    lex::Tok::Key(lex::Key::Struct)
+                    | lex::Tok::Key(lex::Key::From)
+                    | lex::Tok::Key(lex::Key::Column)
                     | lex::Tok::Literal(_) => {
                         exprs.push(parse_expr(Some(t), it));
                     },

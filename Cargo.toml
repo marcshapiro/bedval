@@ -4,3 +4,5 @@ version = "0.1.0"
 authors = ["marc"]
 
 [dependencies]
+num = "0.1.32"
+num-rational = "0.1.32"
