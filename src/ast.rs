@@ -114,10 +114,13 @@ fn parse_exprs(it: &mut vec::IntoIter<lex::Tok>) -> (Vec<Expr>, Option<lex::Tok>
                     lex::Tok::Key(lex::Key::Struct)
                     | lex::Tok::Key(lex::Key::From)
                     | lex::Tok::Key(lex::Key::Column)
+                    | lex::Tok::Key(lex::Key::My)
                     | lex::Tok::Literal(_) => {
+                        println!("parse_exprs literal/key: {:?}", t);
                         exprs.push(parse_expr(Some(t), it));
                     },
                     _ => {
+                        println!("parse_exprs other: {:?}", t);
                         return (exprs, Some(t))
                     },
                 }
@@ -128,4 +131,70 @@ fn parse_exprs(it: &mut vec::IntoIter<lex::Tok>) -> (Vec<Expr>, Option<lex::Tok>
             }
         }
     }
+}
+
+#[cfg(test)]
+fn assert_no_lex_errors(toks: &Vec<lex::Tok>) {
+    for tok in toks {
+        match *tok {
+            lex::Tok::Error(_) => assert!(false),
+            _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+fn sparse(s: &str) -> Expr {
+    let toks = lex::slex(s);
+    assert_no_lex_errors(&toks);
+    parse(toks)
+}
+
+#[test]
+fn test_literal() {
+    let a = sparse("'abc'");
+    assert!(match a {
+        Expr::Literal(s) => s == "abc",
+        _ => false,
+    })
+}
+
+#[test]
+fn test_key_my() {
+    let a = sparse("@my");
+    assert!(match a {
+        Expr::KeyMy => true,
+        _ => false
+    })
+}
+
+#[test]
+fn test_column_empty() {
+    let a = sparse("@column { }");
+    assert!(match a {
+        Expr::Column(c) => 0 == c.len(),
+        _ => false,
+    })
+}
+
+#[test]
+fn test_column_some() {
+    let a = sparse("@column { @my @my @my }");
+    println!("* * * * *a: {:?}",a);
+    assert!(match a {
+        Expr::Column(ref c) => {
+            3 == c.len()
+            && match c[0] {
+                Expr::KeyMy => true,
+                _ => false,
+            } && match c[1] {
+                Expr::KeyMy => true,
+                _ => false,
+            } && match c[2] {
+                Expr::KeyMy => true,
+                _ => false,
+            }
+        }
+        _ => false,
+    })
 }

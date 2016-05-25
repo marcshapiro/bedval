@@ -2,7 +2,7 @@ use std;
 use std::str::FromStr;
 use std::fmt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Key {
     Bind,
     Column,
@@ -30,7 +30,7 @@ impl fmt::Display for Key {
 }
 
 // token enum list
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Tok {
     // single char tokens
     CurlL,
@@ -69,10 +69,6 @@ fn empty_literal() -> String {
     String::with_capacity(20)
 }
 
-fn empty_comment() -> String {
-    String::with_capacity(20)
-}
-
 fn lex_white(first_char: char, chars: &mut std::str::Chars)
     -> (Option<char>, Tok) {
   let (oc, word) = read_to(chars, |c| !c.is_whitespace());
@@ -108,61 +104,9 @@ fn lex_at(chars: &mut std::str::Chars) -> (Option<char>, Tok) {
     (oc, at_tok(word))
 }
 
-// TODO: inline
-fn lex_q(chars: &mut std::str::Chars) -> Tok {
-    //println!("*lex_q*");
-    lex_lit(false, true, '\'', chars)
-}
-
-fn lex_hash(chars: &mut std::str::Chars, pass_comment: bool) -> Option<Tok> {
-    let mut n_hash = 1;
-    while let Some(c) = chars.next() {
-        //println!("*lex_hash c* {:?}",c);
-        if c.is_whitespace() {
-            if c == '\n' { // empty comment
-                if 1 == n_hash {
-                    return if pass_comment {
-                        Some(Tok::Comment("".to_string()))
-                    } else {
-                        None
-                    };
-                } else {
-                    // ....
-                    return Some(Tok::Error("Empty multihash NYI".to_string()))
-                }
-            } else {
-                if 1 == n_hash {
-                    let tok = lex_comment_eol(chars);
-                    return if pass_comment { Some(tok) } else { None };
-                } else {
-                    return Some(Tok::Error("multihash NYI".to_string()));
-                }
-            };
-        } else if c == '#' {
-            n_hash += 1;
-        } else if c.is_alphanumeric() {
-            return Some(Tok::Error("pragma NYI".to_string()));
-        } else if "{([<`'\"|".contains(c) {
-            return Some(Tok::Error("Inline comment NYI".to_string()));
-        } else if "+-".contains(c) {
-            return Some(Tok::Error("On/off pragma NYI".to_string()));
-        } else {
-            return Some(Tok::Error("Bad char after #".to_string()));
-        }
-    }
-    None
-}
-
-fn lex_comment_eol(chars: &mut std::str::Chars) -> Tok {
-    let mut word = empty_comment();
-    while let Some(c) = chars.next() {
-        if c == '\n' {
-            return Tok::Comment(word.clone());
-        } else {
-            word = word + &c.to_string();
-        }
-    }
-    Tok::Error("Comment unreachable".to_string())
+fn lex_hash(chars: &mut std::str::Chars) -> Tok {
+    let (_, word) = read_to(chars, |c| c == '\n');
+    return Tok::Comment(word);
 }
 
 fn lex_esc(chars: &mut std::str::Chars, digit_esc: bool, quote_esc: bool,
@@ -252,7 +196,7 @@ fn lex_bare(first_char: char, chars: &mut std::str::Chars) -> (Option<char>, Tok
 fn read_to<F>(chars: &mut std::str::Chars, is_end: F)
     -> (Option<char>, String)
     where F: Fn(char) -> bool {
-  let mut word = empty_literal(); // ??
+  let mut word = empty_literal();
   while let Some(c) = chars.next() {
       //println!("*read_to c* {:?}",c);
       if is_end(c) {
@@ -288,11 +232,11 @@ fn lex_tok(first_char: Option<char>, chars: &mut std::str::Chars)
         (None, Some(Tok::CurlR))
     } else if c == '\'' {
         //println!("*lex_tok {:?}",c);
-        (None, Some(lex_q(chars)))
+        (None, Some(lex_lit(false, true, '\'', chars)))
     } else if c == '@' {
         some_tok(lex_at(chars))
     } else if c == '#' {
-        (None, lex_hash(chars, true))
+        (None, Some(lex_hash(chars)))
     } else {
         (None,Some(Tok::Error(format!("Bad char: {}",c))))
     }
@@ -316,7 +260,7 @@ pub fn lex(text: String) -> Vec<Tok> {
 ///////////////////////////////////////////////////////////// tests
 
 #[cfg(test)]
-fn slex(text: &str) -> Vec<Tok> {
+pub fn slex(text: &str) -> Vec<Tok> {
     //println!("*slex text* {:?} {:?} {:?}",text.len(), text.to_string().len(),text);
     lex(text.to_string())
 }
@@ -440,4 +384,95 @@ fn test_nq_noesc() {
         Tok::Literal(ref w) => assert!(w == "a\\nb"),
         _ => assert!(false),
     }
+}
+
+#[test]
+fn test_key_bind() {
+    let a = slex("@bind");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Key(Key::Bind) => true, _ => false, });
+}
+
+#[test]
+fn test_key_column() {
+    let a = slex("@column");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Key(Key::Column) => true, _ => false, });
+}
+
+#[test]
+fn test_key_from() {
+    let a = slex("@from");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Key(Key::From) => true, _ => false, });
+}
+
+#[test]
+fn test_key_my() {
+    let a = slex("@my");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Key(Key::My) => true, _ => false, });
+}
+
+#[test]
+fn test_key_root() {
+    let a = slex("@root");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Key(Key::Root) => true, _ => false, });
+}
+
+#[test]
+fn test_key_struct() {
+    let a = slex("@struct");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Key(Key::Struct) => true, _ => false, });
+}
+
+#[test]
+fn test_key_sys() {
+    let a = slex("@sys");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Key(Key::Sys) => true, _ => false, });
+}
+
+#[test]
+fn test_key_up() {
+    let a = slex("@bind");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Key(Key::Bind) => true, _ => false, });
+}
+
+#[test]
+fn test_key_bad_empty() {
+    let a = slex("@");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Error(_) => true, _ => false, });
+}
+
+#[test]
+fn test_key_bad_name() {
+    let a = slex("@xxx");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::Error(_) => true, _ => false, });
+}
+
+#[test]
+fn test_key_bad_char() {
+    let a = slex("@@");
+    assert!(2 == a.len());
+    assert!(match a[0] { Tok::Error(_) => true, _ => false, });
+}
+
+#[test]
+fn test_curl_l() {
+    let a = slex("{");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::CurlL => true, _ => false, });
+}
+
+#[test]
+fn test_curl_r() {
+    let a = slex("}");
+    assert!(1 == a.len());
+    assert!(match a[0] { Tok::CurlR => true, _ => false, });
 }
