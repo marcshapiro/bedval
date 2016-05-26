@@ -2,7 +2,7 @@ use lex;
 use std::vec;
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Literal(String),
     Column(Vec<Expr>), // KeyColumn LCurl <Expr>* RCurl
@@ -102,8 +102,6 @@ fn parse_expr(ofirst_tok: Option<lex::Tok>, it: &mut vec::IntoIter<lex::Tok>) ->
     }
 }
 
-
-
 fn parse_exprs(it: &mut vec::IntoIter<lex::Tok>) -> (Vec<Expr>, Option<lex::Tok>) {
     let mut exprs: Vec<Expr> = vec![];
     loop {
@@ -153,19 +151,13 @@ fn sparse(s: &str) -> Expr {
 #[test]
 fn test_literal() {
     let a = sparse("'abc'");
-    assert!(match a {
-        Expr::Literal(s) => s == "abc",
-        _ => false,
-    })
+    assert!(a == Expr::Literal("abc".to_string()));
 }
 
 #[test]
 fn test_key_my() {
     let a = sparse("@my");
-    assert!(match a {
-        Expr::KeyMy => true,
-        _ => false
-    })
+    assert!(a == Expr::KeyMy);
 }
 
 #[test]
@@ -184,16 +176,9 @@ fn test_column_some() {
     assert!(match a {
         Expr::Column(ref c) => {
             3 == c.len()
-            && match c[0] {
-                Expr::KeyMy => true,
-                _ => false,
-            } && match c[1] {
-                Expr::KeyMy => true,
-                _ => false,
-            } && match c[2] {
-                Expr::KeyMy => true,
-                _ => false,
-            }
+            && c[0] == Expr::KeyMy
+            && c[1] == Expr::KeyMy
+            && c[2] == Expr::KeyMy
         }
         _ => false,
     })

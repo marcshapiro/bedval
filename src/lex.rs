@@ -14,6 +14,13 @@ pub enum Key {
     Up,
 }
 
+#[test]
+fn test_peq_bind() {
+    assert!(Key::Bind == Key::Bind);
+    assert!(Key::Column == Key::Column);
+    assert!(Key::Bind != Key::Column);
+}
+
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", match *self {
@@ -49,6 +56,24 @@ pub enum Tok {
 
     // oops
     Error(String),
+}
+
+#[test]
+fn test_peq_tok() {
+    assert!(Tok::CurlL == Tok::CurlL);
+    assert!(Tok::CurlL != Tok::CurlR);
+    assert!(Tok::CurlR == Tok::CurlR);
+}
+
+#[test]
+fn test_peq_tok_key() {
+    assert!(Tok::Key(Key::Bind) == Tok::Key(Key::Bind));
+    assert!(Tok::Key(Key::My) != Tok::Key(Key::Bind));
+}
+
+#[test]
+fn test_peq_tok_lit() {
+    assert!(Tok::Literal("aaa".to_string()) == Tok::Literal("aaa".to_string()));
 }
 
 impl fmt::Display for Tok {
@@ -274,12 +299,9 @@ fn test_empty_string() {
 #[test]
 fn test_white() {
     let w = "  \t  \n  ";
-    let a = lex(w.to_string());
+    let a = slex(w);
     assert!(1 == a.len());
-    match a[0] {
-        Tok::Whitespace(ref x) => assert!(x.clone() == w),
-        _ => assert!(false),
-    }
+    assert!(a[0] == Tok::Whitespace(w.to_string()));
 }
 
 #[test]
@@ -287,9 +309,14 @@ fn test_bare() {
     let w = "abc123";
     let a = slex(w);
     assert!(1 == a.len());
-    match a[0] {
-        Tok::Literal(ref x) => assert!(x.clone() == w.to_string()),
-        _ => assert!(false),
+    assert!(a[0] == Tok::Literal(w.to_string()));
+}
+
+#[cfg(test)]
+fn is_error(t: &Tok) -> bool {
+    match t {
+        &Tok::Error(_) => true,
+        _ => false,
     }
 }
 
@@ -298,49 +325,31 @@ fn test_bare_q() {
     let w = "abc'xxx'";
     let a = slex(w);
     assert!(2 == a.len());
-    match a[0] {
-        Tok::Error(_) => {},
-        _ => assert!(false)
-    }
-    match a[1] {
-        Tok::Error(_) => {},
-        _ => assert!(false)
-    }
+    assert!(is_error(&a[0]));
+    assert!(is_error(&a[1]));
 }
 
 #[test]
 fn test_err() {
     let w = "_";
-    let a = lex(w.to_string());
+    let a = slex(w);
     assert!(1 == a.len());
-    match a[0] {
-        Tok::Error(_) => {},
-        _ => assert!(false)
-    }
+    assert!(is_error(&a[0]));
 }
 
 #[test]
 fn test_q() {
-    let a = lex("'abc'".to_string());
+    let a = slex("'abc'");
     assert!(1 == a.len());
-    match a[0] {
-        Tok::Literal(ref w) => assert!(w == "abc"),
-        _ => assert!(false)
-    }
+    assert!(a[0] == Tok::Literal("abc".to_string()));
 }
 
 #[test]
 fn test_q_nonl() {
-    let a = lex("'a\nc'".to_string());
+    let a = slex("'a\nc'");
     assert!(2 == a.len());
-    match a[0] {
-        Tok::Error(_) => {},
-        _ => assert!(false),
-    }
-    match a[1] {
-        Tok::Error(_) => {},
-        _ => assert!(false),
-    }
+    assert!(is_error(&a[0]));
+    assert!(is_error(&a[1]));
 }
 
 #[test]
@@ -348,131 +357,118 @@ fn test_q_escnl() {
     let a = slex("'a\\nb'");
     //println!("*q_noesc* {:?}",a);
     assert!(1 == a.len());
-    match a[0] {
-        Tok::Literal(ref w) => {
-            assert!(w == "a\nb");
-        },
-        _ => assert!(false),
-    }
+    assert!(a[0] == Tok::Literal("a\nb".to_string()));
 }
 
 #[test]
 fn test_nq() {
     let a = slex("n'abc'");
     assert!(1 == a.len());
-    match a[0] {
-        Tok::Literal(ref w) => assert!(w == "abc"),
-        _ => assert!(false)
-    }
+    assert!(a[0] == Tok::Literal("abc".to_string()));
 }
 
 #[test]
 fn test_nq_nl() {
     let a = slex("n'a\nc'");
     assert!(1 == a.len());
-    match a[0] {
-        Tok::Literal(ref w) => assert!(w == "a\nc"),
-        _ => assert!(false),
-    }
+    assert!(a[0] == Tok::Literal("a\nc".to_string()));
 }
 
 #[test]
 fn test_nq_noesc() {
     let a = slex("n'a\\nb'");
     assert!(1 == a.len());
-    match a[0] {
-        Tok::Literal(ref w) => assert!(w == "a\\nb"),
-        _ => assert!(false),
-    }
+    assert!(a[0] == Tok::Literal("a\\nb".to_string()));
 }
 
 #[test]
 fn test_key_bind() {
     let a = slex("@bind");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Key(Key::Bind) => true, _ => false, });
+    assert!(a[0] == Tok::Key(Key::Bind));
 }
 
 #[test]
 fn test_key_column() {
     let a = slex("@column");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Key(Key::Column) => true, _ => false, });
+    assert!(a[0] == Tok::Key(Key::Column));
 }
 
 #[test]
 fn test_key_from() {
     let a = slex("@from");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Key(Key::From) => true, _ => false, });
+    assert!(a[0] == Tok::Key(Key::From));
 }
 
 #[test]
 fn test_key_my() {
     let a = slex("@my");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Key(Key::My) => true, _ => false, });
+    assert!(a[0] == Tok::Key(Key::My));
 }
 
 #[test]
 fn test_key_root() {
     let a = slex("@root");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Key(Key::Root) => true, _ => false, });
+    assert!(a[0] == Tok::Key(Key::Root));
 }
 
 #[test]
 fn test_key_struct() {
     let a = slex("@struct");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Key(Key::Struct) => true, _ => false, });
+    assert!(a[0] == Tok::Key(Key::Struct));
 }
 
 #[test]
 fn test_key_sys() {
     let a = slex("@sys");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Key(Key::Sys) => true, _ => false, });
+    assert!(a[0] == Tok::Key(Key::Sys));
 }
 
 #[test]
 fn test_key_up() {
     let a = slex("@bind");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Key(Key::Bind) => true, _ => false, });
+    assert!(a[0] == Tok::Key(Key::Bind));
 }
 
 #[test]
 fn test_key_bad_empty() {
     let a = slex("@");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Error(_) => true, _ => false, });
+    assert!(is_error(&a[0]));
 }
 
 #[test]
 fn test_key_bad_name() {
     let a = slex("@xxx");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::Error(_) => true, _ => false, });
+    assert!(is_error(&a[0]));
 }
 
 #[test]
 fn test_key_bad_char() {
     let a = slex("@@");
     assert!(2 == a.len());
-    assert!(match a[0] { Tok::Error(_) => true, _ => false, });
+    assert!(is_error(&a[0]));
+    assert!(is_error(&a[1]));
 }
 
 #[test]
 fn test_curl_l() {
     let a = slex("{");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::CurlL => true, _ => false, });
+    assert!(a[0] == Tok::CurlL);
 }
 
 #[test]
 fn test_curl_r() {
     let a = slex("}");
     assert!(1 == a.len());
-    assert!(match a[0] { Tok::CurlR => true, _ => false, });
+    assert!(a[0] == Tok::CurlR);
 }
