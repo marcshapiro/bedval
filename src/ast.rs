@@ -150,36 +150,21 @@ fn sparse(s: &str) -> Expr {
 
 #[test]
 fn test_literal() {
-    let a = sparse("'abc'");
-    assert!(a == Expr::Literal("abc".to_string()));
+    assert_eq!(sparse("'abc'"), Expr::Literal("abc".to_string()));
 }
 
 #[test]
 fn test_key_my() {
-    let a = sparse("@my");
-    assert!(a == Expr::KeyMy);
+    assert_eq!(sparse("@my"), Expr::KeyMy);
 }
 
 #[test]
 fn test_column_empty() {
-    let a = sparse("@column { }");
-    assert!(match a {
-        Expr::Column(c) => 0 == c.len(),
-        _ => false,
-    })
+    assert_eq!(sparse("@column { }"), Expr::Column(vec![]));
 }
 
 #[test]
 fn test_column_some() {
-    let a = sparse("@column { @my @my @my }");
-    println!("* * * * *a: {:?}",a);
-    assert!(match a {
-        Expr::Column(ref c) => {
-            3 == c.len()
-            && c[0] == Expr::KeyMy
-            && c[1] == Expr::KeyMy
-            && c[2] == Expr::KeyMy
-        }
-        _ => false,
-    })
+    assert_eq!(sparse("@column { @my @my @my }"),
+        Expr::Column(vec![Expr::KeyMy, Expr::KeyMy, Expr::KeyMy]));
 }

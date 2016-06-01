@@ -21,6 +21,11 @@ fn test_peq_bind() {
     assert!(Key::Bind != Key::Column);
 }
 
+#[test]
+fn text_peq_vec_key() {
+    assert!(vec![Key::Bind] == vec![Key::Bind])
+}
+
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", match *self {
@@ -286,30 +291,25 @@ pub fn lex(text: String) -> Vec<Tok> {
 
 #[cfg(test)]
 pub fn slex(text: &str) -> Vec<Tok> {
-    //println!("*slex text* {:?} {:?} {:?}",text.len(), text.to_string().len(),text);
     lex(text.to_string())
 }
 
 #[test]
 fn test_empty_string() {
     let a = slex("");
-    assert!(0 == a.len())
+    assert_eq!(0, a.len())
 }
 
 #[test]
 fn test_white() {
     let w = "  \t  \n  ";
-    let a = slex(w);
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Whitespace(w.to_string()));
+    assert_eq!(slex(w), vec![Tok::Whitespace(w.to_string())]);
 }
 
 #[test]
 fn test_bare() {
     let w = "abc123";
-    let a = slex(w);
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Literal(w.to_string()));
+    assert_eq!(slex(w), vec![Tok::Literal(w.to_string())]);
 }
 
 #[cfg(test)]
@@ -320,155 +320,121 @@ fn is_error(t: &Tok) -> bool {
     }
 }
 
+#[cfg(test)]
+fn vec_err(vt: &Vec<Tok>) -> usize {
+    for t in vt {
+        assert!(is_error(t))
+    }
+    vt.len()
+}
+
 #[test]
 fn test_bare_q() {
-    let w = "abc'xxx'";
-    let a = slex(w);
-    assert!(2 == a.len());
-    assert!(is_error(&a[0]));
-    assert!(is_error(&a[1]));
+    let a = slex("abc'xxx'");
+    assert!(2 == vec_err(&a));
 }
 
 #[test]
 fn test_err() {
-    let w = "_";
-    let a = slex(w);
-    assert!(1 == a.len());
-    assert!(is_error(&a[0]));
+    let a = slex("_");
+    assert!(1 == vec_err(&a));
 }
 
 #[test]
 fn test_q() {
-    let a = slex("'abc'");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Literal("abc".to_string()));
+    assert_eq!(slex("'abc'"), vec![Tok::Literal("abc".to_string())]);
 }
 
 #[test]
 fn test_q_nonl() {
     let a = slex("'a\nc'");
-    assert!(2 == a.len());
-    assert!(is_error(&a[0]));
-    assert!(is_error(&a[1]));
+    assert!(2 == vec_err(&a));
 }
 
 #[test]
 fn test_q_escnl() {
-    let a = slex("'a\\nb'");
-    //println!("*q_noesc* {:?}",a);
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Literal("a\nb".to_string()));
+    assert_eq!(slex("'a\\nb'"), vec![Tok::Literal("a\nb".to_string())]);
 }
 
 #[test]
 fn test_nq() {
-    let a = slex("n'abc'");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Literal("abc".to_string()));
+    assert_eq!(slex("n'abc'"), vec![Tok::Literal("abc".to_string())]);
 }
 
 #[test]
 fn test_nq_nl() {
-    let a = slex("n'a\nc'");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Literal("a\nc".to_string()));
+    assert_eq!(slex("n'a\nc'"), vec![Tok::Literal("a\nc".to_string())]);
 }
 
 #[test]
 fn test_nq_noesc() {
-    let a = slex("n'a\\nb'");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Literal("a\\nb".to_string()));
+    assert_eq!(slex("n'a\\nb'"), vec![Tok::Literal("a\\nb".to_string())]);
 }
 
 #[test]
 fn test_key_bind() {
-    let a = slex("@bind");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Key(Key::Bind));
+    assert_eq!(slex("@bind"), vec![Tok::Key(Key::Bind)]);
 }
 
 #[test]
 fn test_key_column() {
-    let a = slex("@column");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Key(Key::Column));
+    assert_eq!(slex("@column"), vec![Tok::Key(Key::Column)]);
 }
 
 #[test]
 fn test_key_from() {
-    let a = slex("@from");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Key(Key::From));
+    assert_eq!(slex("@from"), vec![Tok::Key(Key::From)]);
 }
 
 #[test]
 fn test_key_my() {
-    let a = slex("@my");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Key(Key::My));
+    assert_eq!(slex("@my"), vec![Tok::Key(Key::My)]);
 }
 
 #[test]
 fn test_key_root() {
-    let a = slex("@root");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Key(Key::Root));
+    assert_eq!(slex("@root"), vec![Tok::Key(Key::Root)]);
 }
 
 #[test]
 fn test_key_struct() {
-    let a = slex("@struct");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Key(Key::Struct));
+    assert_eq!(slex("@struct"), vec![Tok::Key(Key::Struct)]);
 }
 
 #[test]
 fn test_key_sys() {
-    let a = slex("@sys");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Key(Key::Sys));
+    assert_eq!(slex("@sys"), vec![Tok::Key(Key::Sys)]);
 }
 
 #[test]
 fn test_key_up() {
-    let a = slex("@bind");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::Key(Key::Bind));
+    assert_eq!(slex("@bind"), vec![Tok::Key(Key::Bind)]);
 }
 
 #[test]
 fn test_key_bad_empty() {
     let a = slex("@");
-    assert!(1 == a.len());
-    assert!(is_error(&a[0]));
+    assert!(1 == vec_err(&a));
 }
 
 #[test]
 fn test_key_bad_name() {
     let a = slex("@xxx");
-    assert!(1 == a.len());
-    assert!(is_error(&a[0]));
+    assert!(1 == vec_err(&a));
 }
 
 #[test]
 fn test_key_bad_char() {
     let a = slex("@@");
-    assert!(2 == a.len());
-    assert!(is_error(&a[0]));
-    assert!(is_error(&a[1]));
+    assert!(2 == vec_err(&a));
 }
 
 #[test]
 fn test_curl_l() {
-    let a = slex("{");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::CurlL);
+    assert_eq!(slex("{"), vec![Tok::CurlL]);
 }
 
 #[test]
 fn test_curl_r() {
-    let a = slex("}");
-    assert!(1 == a.len());
-    assert!(a[0] == Tok::CurlR);
+    assert_eq!(slex("}"), vec![Tok::CurlR]);
 }
