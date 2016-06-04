@@ -5,6 +5,7 @@ use std::fmt;
 #[derive(Debug, PartialEq, Eq)]
 pub enum Key {
     Bind,
+    Call,
     Column,
     From,
     My,
@@ -30,6 +31,7 @@ impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", match *self {
             Key::Bind => "bind",
+            Key::Call => "call",
             Key::Column => "column",
             Key::From => "from",
             Key::My => "my",
@@ -110,6 +112,7 @@ impl std::str::FromStr for Key {
     fn from_str(word: &str) -> Result<Key, Tok> {
         match word {
             "bind" => Ok(Key::Bind),
+            "call" => Ok(Key::Call),
             "column" => Ok(Key::Column),
             "from" => Ok(Key::From),
             "my" => Ok(Key::My),
@@ -409,6 +412,11 @@ fn test_key_sys() {
 #[test]
 fn test_key_up() {
     assert_eq!(slex("@bind"), vec![Tok::Key(Key::Bind)]);
+}
+
+#[test]
+fn test_key_call() {
+    assert_eq!(slex("@call"), vec![Tok::Key(Key::Call)]);
 }
 
 #[test]

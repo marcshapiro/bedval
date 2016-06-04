@@ -12,6 +12,7 @@ pub enum Expr {
     KeyUp,
     KeyMy,
     From(Vec<Expr>), // KeyFrom <Expr> LCurl <Expr>_ RCurl
+    Call{function:Box<Expr>, arguments:Vec<Bind>},
     Error(String),
 }
 
@@ -26,6 +27,7 @@ impl fmt::Display for Expr {
             Expr::KeyUp => write!(f, "@Up"),
             Expr::KeyMy => write!(f, "@My"),
             Expr::From(ref v) => write!(f, "from({:?})", v), // FIXME: recur / no Debug
+            Expr::Call{function: ref ftn, arguments: ref a} => write!(f, "call {:?} ( {:?} )", *ftn, a), // FIXME
             Expr::Error(ref s) => write!(f, "err({})", s),
         }
     }
@@ -95,6 +97,22 @@ fn parse_binds(it: &mut vec::IntoIter<lex::Tok>) -> Result<(Vec<Bind>, Option<le
     Ok((binds, next_tok))
 }
 
+fn parse_bind_list(it: &mut vec::IntoIter<lex::Tok>) -> Result<Vec<Bind>, String> {
+    match non_gray(it) {
+        Some(lex::Tok::CurlL) => {
+            match parse_binds(it) {
+                Ok((binds, end_tok)) =>
+                    match end_tok {
+                        Some(lex::Tok::CurlR) => Ok(binds),
+                        _ => Err("bind list must end with '}'".to_string()),
+                    },
+                Err(e) => Err(e),
+            }
+        },
+        _ => Err("bind list must start with '{'".to_string()),
+    }
+}
+
 fn parse_expr(ofirst_tok: Option<lex::Tok>, it: &mut vec::IntoIter<lex::Tok>) -> Expr {
     let first_tok = match ofirst_tok {
         Some(ft) => ft,
@@ -104,21 +122,11 @@ fn parse_expr(ofirst_tok: Option<lex::Tok>, it: &mut vec::IntoIter<lex::Tok>) ->
         }
     };
     match first_tok {
-        lex::Tok::Key(lex::Key::Struct) => {
-            match non_gray(it) {
-                Some(lex::Tok::CurlL) => {
-                    match parse_binds(it) {
-                        Ok((binds, end_tok)) =>
-                            match end_tok {
-                                Some(lex::Tok::CurlR) => Expr::Struct(binds),
-                                _ => Expr::Error("@struct must end with '}'".to_string()),
-                            },
-                        Err(e) => Expr::Error(e),
-                    }
-                },
-                _ => Expr::Error("@struct must be followed by '{'".to_string()),
-            }
-        },
+        lex::Tok::Key(lex::Key::Struct) =>
+            match parse_bind_list(it) {
+                Ok(binds) => Expr::Struct(binds),
+                Err(e) => Expr::Error(e),
+            },
         lex::Tok::Key(lex::Key::Column) => {
             let otok = non_gray(it);
             match otok {
@@ -154,6 +162,13 @@ fn parse_expr(ofirst_tok: Option<lex::Tok>, it: &mut vec::IntoIter<lex::Tok>) ->
                     }
                 },
                 _ => Expr::Error("@from must have '{' after root struct".to_string()),
+            }
+        },
+        lex::Tok::Key(lex::Key::Call) => {
+            let ftn = parse_expr(None, it);
+            match parse_bind_list(it) {
+                Ok(binds) => Expr::Call{function:Box::new(ftn), arguments:binds},
+                Err(e) => Expr::Error(e),
             }
         },
         lex::Tok::Literal(s) => Expr::Literal(s),
@@ -279,4 +294,25 @@ fn test_struct_two() {
                 Bind{name:"bcd".to_string(), value: Expr::KeyRoot},
             ])
         )
+}
+
+#[test]
+fn test_call_empty() {
+    assert_eq!(sparse("@call @my { }"),
+        Expr::Call{
+            function: Box::new(Expr::KeyMy),
+            arguments: vec![]
+        })
+}
+
+#[test]
+fn test_call_args() {
+    assert_eq!(sparse("@call @my { @bind x { @root } @bind y { @up } }"),
+        Expr::Call{
+            function: Box::new(Expr::KeyMy),
+            arguments: vec![
+                Bind{name:"x".to_string(), value: Expr::KeyRoot},
+                Bind{name:"y".to_string(), value: Expr::KeyUp},
+            ]
+        })
 }
