@@ -21,8 +21,11 @@ build: $(EXE)
 $(EXE): $(SRC) Makefile Cargo.toml
 	cargo build
 
+clean:
+	cargo clean
+
 help:
-	echo "Targets include: run test build echo"
+	echo "Targets include: run test build echo clean"
 
 echo:
 	echo "EXE: $(EXE)"

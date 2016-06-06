@@ -1,5 +1,6 @@
 mod lex;
 mod ast;
+mod fig;
 
 use std::io;
 use std::io::Read;
@@ -19,7 +20,8 @@ fn process_file<P: AsRef<path::Path>>(filename: P) -> io::Result<()> {
     let src = try!(read_file(filename));
     let toks = lex::lex(src.text);
     let ast = ast::parse(toks);
-    println!("{}", ast);
+    let env = fig::create_env(ast);
+    println!("{:?}", env);
     Ok(())
 }
 
