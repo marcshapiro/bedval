@@ -25,7 +25,10 @@ clean:
 	cargo clean
 
 help:
-	echo "Targets include: run test build echo clean"
+	echo "Targets include: run test[nv] build echo clean up g[123456]"
+
+up:
+	curl -sSf https://static.rust-lang.org/rustup.sh | sh
 
 echo:
 	echo "EXE: $(EXE)"

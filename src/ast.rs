@@ -2,7 +2,7 @@ use lex;
 use std::vec;
 use std::fmt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Literal(String),
     Column(Vec<Expr>), // KeyColumn LCurl <Expr>* RCurl
@@ -34,7 +34,7 @@ impl fmt::Display for Expr {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Bind { // KeyBind Literal LCurl Expr RCurl
     name: String,
     value: Expr,
